@@ -1,0 +1,7 @@
+OSA_Data/*.csv
+ref_data/*.dpt
+OSA_Data
+ref_data
+*.csv
+*.dpt
+.idea/
