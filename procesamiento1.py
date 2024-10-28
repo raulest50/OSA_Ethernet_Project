@@ -2,8 +2,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # Load the CSV file
-source = pd.read_csv("./OSA_Data/source_lin_plate1.csv")  # Replace with your file path
-data1 = pd.read_csv("./OSA_Data/data_lin1.csv")  # Replace with your file path
+source = pd.read_csv("./OSA_Data/source_lin_plate_smallband1_hi3.csv")  # Replace with your file path
+data1 = pd.read_csv("./OSA_Data/muestra_lin_smallband1_hi3.csv")  # Replace with your file path
 
 def load_dpt_file(file_path):
     data = pd.read_csv(file_path, header=None, sep=',')
