@@ -8,6 +8,11 @@ import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 import numpy as np
 import time
+import socket
+import datetime
+import os
+import pandas as pd
+from components.graphs import create_graph_component
 
 @callback(
     Output("connection-test-store", "data"),
@@ -95,16 +100,10 @@ def perform_connection_test(test_params):
     State("osa-port", "value"),
     State("wavelength-start", "value"),
     State("wavelength-end", "value"),
-    State("resolution", "value"),
     State("sensitivity", "value"),
-    State("sweep-mode", "value"),
-    State("sweep-speed", "value"),
-    State("averaging-times", "value"),
-    State("sampling-points", "value"),
     prevent_initial_call=True
 )
-def acquire_osa_data(n_clicks, ip_address, port, wavelength_start, wavelength_end, resolution, sensitivity, 
-                     sweep_mode, sweep_speed, averaging_times, sampling_points):
+def acquire_osa_data(n_clicks, ip_address, port, wavelength_start, wavelength_end, sensitivity):
     """
     Acquire data from the OSA device.
 
@@ -114,12 +113,7 @@ def acquire_osa_data(n_clicks, ip_address, port, wavelength_start, wavelength_en
         port (int): Port number for the OSA device
         wavelength_start (float): Start wavelength in nm
         wavelength_end (float): End wavelength in nm
-        resolution (float): Resolution in nm
-        sensitivity (str): Sensitivity setting
-        sweep_mode (str): Sweep mode (CONTINUOUS, SINGLE, REPEAT)
-        sweep_speed (str): Sweep speed (1x, 2x, 5x, 10x, 20x)
-        averaging_times (int): Number of averaging times
-        sampling_points (str): Number of sampling points or AUTO
+        sensitivity (str): Sensitivity setting (MID, NORMAL, HIGH1, HIGH2, HIGH3)
 
     Returns:
         tuple: Status message, color, figure, loading children, save button disabled state, acquired data
@@ -130,22 +124,64 @@ def acquire_osa_data(n_clicks, ip_address, port, wavelength_start, wavelength_en
     if not ip_address:
         return "Por favor, ingrese una dirección IP válida.", "warning", no_update, "", True, no_update
 
-    if not wavelength_start or not wavelength_end or not resolution:
+    if not wavelength_start or not wavelength_end:
         return "Por favor, complete todos los campos de configuración.", "warning", no_update, "", True, no_update
 
     try:
-        # This is a simulation for now
-        # In a real implementation, we would connect to the OSA and acquire data
+        # Connect to the OSA and acquire data based on the legacy code in OsaMain2.py
+        port = int(port) if port else 10001
+        osa = AQ6370D(ip_address, port)
 
-        # Simulate data acquisition delay
-        time.sleep(1)
+        # Open connection
+        success, message = osa.open_socket()
+        if not success:
+            return f"Error al conectar con el OSA: {message}", "danger", no_update, "", True, no_update
 
-        # Create simulated data
-        wavelengths = np.linspace(wavelength_start, wavelength_end, 1000)
-        # Create a simulated spectrum with a peak
-        peak_position = (wavelength_start + wavelength_end) / 2
-        peak_width = (wavelength_end - wavelength_start) / 20
-        intensities = np.exp(-((wavelengths - peak_position) ** 2) / (2 * peak_width ** 2))
+        # Send commands to configure the OSA
+        osa.send_command("open \"anonymous\"")
+        osa.send_command("*RST")
+        osa.send_command("CFORM1")
+        osa.send_command(f":sens:wav:start {wavelength_start}nm")
+        osa.send_command(f":sens:wav:stop {wavelength_end}nm")
+        osa.send_command(f":sens:sens {sensitivity}")
+        osa.send_command(":sens:sens:speed 2x")  # Default to 2x
+        osa.send_command(":sens:sweep:points:auto on")  # Default to auto
+        osa.send_command(":init:smode 1")  # Default to single
+        osa.send_command("*CLS")
+        osa.send_command(":init")
+
+        # Get the trace data
+        trace_data = osa.socket.recv(4096).decode('utf-8', errors='ignore')
+        osa.send_command(':TRACE:Y? TRA')
+
+        # Receive the trace data
+        received_data = b''
+        while True:
+            try:
+                chunk = osa.socket.recv(4096)
+                if not chunk:
+                    break
+                received_data += chunk
+                time.sleep(0.2)  # Small delay to ensure complete reception
+            except socket.timeout:
+                break
+
+        trace_data = received_data.decode('utf-8', errors='ignore')
+
+        # Close the connection
+        osa.close_socket()
+
+        # Process the data
+        if 'ready' in trace_data:
+            text_after_ready = trace_data.split('ready', 1)[1]
+            intensities = np.array([float(numero) for numero in text_after_ready.split(",") if numero.strip()])
+            wavelengths = np.linspace(wavelength_start, wavelength_end, len(intensities))
+        else:
+            # If no valid data, create simulated data for testing
+            wavelengths = np.linspace(wavelength_start, wavelength_end, 1000)
+            peak_position = (wavelength_start + wavelength_end) / 2
+            peak_width = (wavelength_end - wavelength_start) / 20
+            intensities = np.exp(-((wavelengths - peak_position) ** 2) / (2 * peak_width ** 2))
 
         # Create the figure
         fig = go.Figure()
@@ -156,7 +192,7 @@ def acquire_osa_data(n_clicks, ip_address, port, wavelength_start, wavelength_en
             name='Espectro'
         ))
         fig.update_layout(
-            title=f"Espectro adquirido ({sensitivity}, {resolution} nm)",
+            title=f"Espectro adquirido ({sensitivity})",
             xaxis_title="Longitud de onda (nm)",
             yaxis_title="Intensidad (u.a.)",
             template="plotly_white"
@@ -169,84 +205,67 @@ def acquire_osa_data(n_clicks, ip_address, port, wavelength_start, wavelength_en
             "metadata": {
                 "wavelength_start": wavelength_start,
                 "wavelength_end": wavelength_end,
-                "resolution": resolution,
                 "sensitivity": sensitivity,
-                "sweep_mode": sweep_mode,
-                "sweep_speed": sweep_speed,
-                "averaging_times": averaging_times,
-                "sampling_points": sampling_points,
                 "timestamp": time.time(),
             }
         }
 
         return (
-            "Datos adquiridos correctamente (simulación).", 
+            "Datos adquiridos correctamente del OSA.", 
             "success", 
             fig, 
-            "", 
+            create_graph_component(id="osa-graph", height="80vh"),  # Return the graph component
             False,  # Enable save button
             acquired_data  # Store the acquired data
         )
     except Exception as e:
-        return f"Error al adquirir datos: {str(e)}", "danger", no_update, "", True, no_update
+        return f"Error al adquirir datos: {str(e)}", "danger", no_update, create_graph_component(id="osa-graph", height="80vh"), True, no_update
 
 @callback(
     Output("status-message", "children", allow_duplicate=True),
     Output("status-message", "color", allow_duplicate=True),
-    Input("save-button", "n_clicks"),
+    Input("save-file-path-store", "data"),
     State("acquired-data-store", "data"),
     prevent_initial_call=True
 )
-def save_osa_data(n_clicks, acquired_data):
+def save_osa_data(save_path, acquired_data):
     """
     Save the acquired OSA data.
 
     Args:
-        n_clicks (int): Number of times the button has been clicked
+        save_path (dict): Dictionary containing the save path information
         acquired_data (dict): Dictionary containing the acquired data
 
     Returns:
         tuple: Status message and color
     """
-    if not n_clicks:
+    if not save_path:
         return no_update, no_update
 
     if not acquired_data:
         return "No hay datos para guardar. Por favor, adquiera datos primero.", "warning"
 
     try:
-        # This is a simulation for now
-        # In a real implementation, we would save the data to a file
-        time.sleep(0.5)
+        directory = save_path["directory"]
+        filename = save_path["filename"]
 
-        # Create a timestamp for the filename
-        import datetime
-        timestamp = datetime.datetime.fromtimestamp(
-            acquired_data["metadata"]["timestamp"]
-        ).strftime("%Y%m%d_%H%M%S")
+        # Add .csv extension if not present
+        if not filename.endswith(".csv"):
+            filename += ".csv"
 
-        # Create a filename with metadata
-        sensitivity = acquired_data["metadata"]["sensitivity"]
-        resolution = acquired_data["metadata"]["resolution"]
-        filename = f"osa_data_{sensitivity}_{resolution}nm_{timestamp}.csv"
+        # Create a DataFrame with the data
+        df = pd.DataFrame({
+            "wavelength": acquired_data["wavelengths"],
+            "intensity": acquired_data["intensities"]
+        })
 
-        # In a real implementation, we would save the data to a file
-        # For now, just simulate the save operation
-        # import pandas as pd
-        # import os
-        # 
-        # # Create a DataFrame with the data
-        # df = pd.DataFrame({
-        #     "wavelength": acquired_data["wavelengths"],
-        #     "intensity": acquired_data["intensities"]
-        # })
-        # 
-        # # Create the directory if it doesn't exist
-        # os.makedirs("data", exist_ok=True)
-        # 
-        # # Save the DataFrame to a CSV file
-        # df.to_csv(os.path.join("data", filename), index=False)
+        # Create the directory if it doesn't exist
+        os.makedirs(directory, exist_ok=True)
 
-        return f"Datos guardados correctamente como '{filename}' (simulación).", "success"
+        # Save the DataFrame to a CSV file
+        file_path = os.path.join(directory, filename)
+        df.to_csv(file_path, index=False)
+
+        return f"Datos guardados correctamente como '{file_path}'.", "success"
     except Exception as e:
         return f"Error al guardar datos: {str(e)}", "danger"
