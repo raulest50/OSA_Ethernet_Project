@@ -1,7 +1,34 @@
-OSA_Data/*.csv
-ref_data/*.dpt
-OSA_Data
-ref_data
+# → Datos y referenciales (ya los tienes)
+OSA_Data/
+ref_data/
 *.csv
 *.dpt
+
+# → Configuración de JetBrains IDEs
 .idea/
+*.iml
+
+# → Entornos virtuales (ajusta el nombre si usas otro)
+.venv/
+venv/
+env/
+
+# → Byte-code y carpetas de caché de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# → Archivos de testing
+.pytest_cache/
+
+# → Distribución / empaquetado
+build/
+dist/
+*.egg-info/
+
+# → Otros IDEs/editors
+.vscode/
+
+# → Archivos del sistema
+.DS_Store
+Thumbs.db
