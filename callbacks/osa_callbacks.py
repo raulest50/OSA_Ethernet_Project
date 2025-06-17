@@ -176,6 +176,12 @@ def acquire_osa_data(n_clicks, ip_address, port, wavelength_start, wavelength_en
             text_after_ready = trace_data.split('ready', 1)[1]
             intensities = np.array([float(numero) for numero in text_after_ready.split(",") if numero.strip()])
             wavelengths = np.linspace(wavelength_start, wavelength_end, len(intensities))
+        elif 'wavelength,intensity' in trace_data:
+            # Process CSV data format
+            lines = trace_data.strip().split('\n')
+            data = [line.split(',') for line in lines[1:]]  # Skip header
+            wavelengths = np.array([float(row[0]) for row in data])
+            intensities = np.array([float(row[1]) for row in data])
         else:
             # If no valid data, create simulated data for testing
             wavelengths = np.linspace(wavelength_start, wavelength_end, 1000)
@@ -189,14 +195,28 @@ def acquire_osa_data(n_clicks, ip_address, port, wavelength_start, wavelength_en
             x=wavelengths,
             y=intensities,
             mode='lines',
-            name='Espectro'
+            name='Espectro',
+            line=dict(color='blue', width=2)
         ))
         fig.update_layout(
             title=f"Espectro adquirido ({sensitivity})",
             xaxis_title="Longitud de onda (nm)",
             yaxis_title="Intensidad (u.a.)",
-            template="plotly_white"
+            template="plotly_white",
+            margin=dict(l=50, r=50, t=80, b=50),
+            height=600,
+            hovermode="closest",
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
         )
+        # Add grid lines for better readability
+        fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
+        fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
 
         # Create a dictionary with the acquired data for storage
         acquired_data = {
@@ -210,16 +230,37 @@ def acquire_osa_data(n_clicks, ip_address, port, wavelength_start, wavelength_en
             }
         }
 
+        # Create a graph component with the figure
+        graph_component = create_graph_component(id="osa-graph", figure=fig, height="80vh")
+
         return (
             "Datos adquiridos correctamente del OSA.", 
             "success", 
-            fig, 
-            create_graph_component(id="osa-graph", height="80vh"),  # Return the graph component
+            fig,  # This updates the figure in the existing graph
+            graph_component,  # Return the graph component with the figure
             False,  # Enable save button
             acquired_data  # Store the acquired data
         )
     except Exception as e:
-        return f"Error al adquirir datos: {str(e)}", "danger", no_update, create_graph_component(id="osa-graph", height="80vh"), True, no_update
+        # Create an empty figure with an error message
+        error_fig = go.Figure()
+        error_fig.add_annotation(
+            text=f"Error al adquirir datos: {str(e)}",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5,
+            showarrow=False,
+            font=dict(size=14, color="red")
+        )
+        error_fig.update_layout(
+            xaxis_title="Longitud de onda (nm)",
+            yaxis_title="Intensidad (u.a.)",
+            template="plotly_white"
+        )
+
+        # Create a graph component with the error figure
+        error_graph_component = create_graph_component(id="osa-graph", figure=error_fig, height="80vh")
+
+        return f"Error al adquirir datos: {str(e)}", "danger", error_fig, error_graph_component, True, no_update
 
 @callback(
     Output("status-message", "children", allow_duplicate=True),

@@ -69,16 +69,20 @@ def create_graph_card(id="graph-card", graph_id="graph", figure=None, height="80
     if id is not None:
         kwargs['id'] = id
 
-    return dbc.Card(
-        [
-            dbc.CardHeader(title) if title else None,
-            dbc.CardBody(
-                create_graph_component(
-                    id=graph_id,
-                    figure=figure,
-                    height=height
-                )
+    card_components = []
+    if title:
+        card_components.append(dbc.CardHeader(title))
+    card_components.append(
+        dbc.CardBody(
+            create_graph_component(
+                id=graph_id,
+                figure=figure,
+                height=height
             )
-        ],
+        )
+    )
+
+    return dbc.Card(
+        card_components,
         **kwargs
     )
