@@ -10,16 +10,17 @@ import numpy as np
 import time
 
 @callback(
-    Output("status-message", "children"),
-    Output("status-message", "color"),
+    Output("connection-test-store", "data"),
+    Output("test-connection-button", "disabled"),
+    Output("connection-test-spinner", "spinner_style"),
     Input("test-connection-button", "n_clicks"),
     State("osa-ip-address", "value"),
     State("osa-port", "value"),
     prevent_initial_call=True
 )
-def test_osa_connection(n_clicks, ip_address, port):
+def start_connection_test(n_clicks, ip_address, port):
     """
-    Test the connection to the OSA device.
+    Start the connection test process.
 
     Args:
         n_clicks (int): Number of times the button has been clicked
@@ -27,25 +28,60 @@ def test_osa_connection(n_clicks, ip_address, port):
         port (int): Port number for the OSA device
 
     Returns:
-        tuple: Status message and color
+        tuple: Connection test parameters, button disabled state, spinner style
     """
     if not n_clicks:
-        return no_update, no_update
+        return no_update, no_update, no_update
 
     if not ip_address:
-        return "Por favor, ingrese una dirección IP válida.", "warning"
+        return None, False, {"display": "none"}
+
+    # Store the connection test parameters
+    port = int(port) if port else 10001
+    test_params = {
+        "ip_address": ip_address,
+        "port": port,
+        "timestamp": time.time()
+    }
+
+    # Show spinner and disable button during connection test
+    # This will be returned immediately to the UI
+    return test_params, True, {"display": "inline-block"}
+
+@callback(
+    Output("status-message", "children"),
+    Output("status-message", "color"),
+    Output("test-connection-button", "disabled", allow_duplicate=True),
+    Output("connection-test-spinner", "spinner_style", allow_duplicate=True),
+    Input("connection-test-store", "data"),
+    prevent_initial_call=True
+)
+def perform_connection_test(test_params):
+    """
+    Perform the actual connection test.
+
+    Args:
+        test_params (dict): Connection test parameters
+
+    Returns:
+        tuple: Status message, color, button disabled state, spinner style
+    """
+    if not test_params:
+        return "Por favor, ingrese una dirección IP válida.", "warning", False, {"display": "none"}
 
     try:
-        port = int(port) if port else 10001
+        ip_address = test_params["ip_address"]
+        port = test_params["port"]
+
         osa = AQ6370D(ip_address, port)
         success, message = osa.test_connection()
 
         if success:
-            return message, "success"
+            return message, "success", False, {"display": "none"}
         else:
-            return message, "danger"
+            return message, "danger", False, {"display": "none"}
     except Exception as e:
-        return f"Error al probar la conexión: {str(e)}", "danger"
+        return f"Error al probar la conexión: {str(e)}", "danger", False, {"display": "none"}
 
 @callback(
     Output("status-message", "children", allow_duplicate=True),

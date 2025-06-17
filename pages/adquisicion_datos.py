@@ -11,7 +11,7 @@ from components.graphs import create_graph_component
 from components.alerts import create_info_alert
 
 # Import callbacks (this ensures they are registered)
-from callbacks.osa_callbacks import test_osa_connection, acquire_osa_data, save_osa_data
+from callbacks.osa_callbacks import start_connection_test, perform_connection_test, acquire_osa_data, save_osa_data
 
 # Register the page
 dash.register_page(__name__, path='/adquisicion-datos', name='Adquisición de datos', order=1, icon='cloud-download')
@@ -48,8 +48,17 @@ layout = dash.html.Div([
                     ]),
                     dash.html.Br(),
                     dash.html.Div([
+                        dbc.Spinner(
+                            id="connection-test-spinner",
+                            color="info",
+                            size="sm",
+                            type="border",
+                            fullscreen=False,
+                            children=[],
+                            spinner_style={"display": "none"}
+                        ),
                         create_button("Probar conexión", id="test-connection-button", color="info", icon="ethernet")
-                    ])
+                    ], className="d-flex align-items-center gap-2")
                 ],
                 id="connection-settings-card"
             ),
@@ -176,22 +185,24 @@ layout = dash.html.Div([
         ], width=4),
 
         dbc.Col([
-            # Loading component for data acquisition
+            # Graph to display acquired data with loading spinner
             dbc.Spinner(
                 id="loading-acquisition",
                 color="primary",
                 type="border",
                 fullscreen=False,
-                children=[]
+                children=[
+                    create_graph_component(id="osa-graph", height="80vh")
+                ]
             ),
-
-            # Graph to display acquired data
-            create_graph_component(id="osa-graph", height="80vh")
         ], width=8),
     ]),
 
     # Store for holding acquired data
-    dcc.Store(id="acquired-data-store")
+    dcc.Store(id="acquired-data-store"),
+
+    # Store for connection test state
+    dcc.Store(id="connection-test-store")
 ])
 
 # Register client-side callbacks after layout is defined
