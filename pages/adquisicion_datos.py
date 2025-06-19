@@ -215,18 +215,34 @@ layout = dash.html.Div([
     # Store for save file path
     dcc.Store(id="save-file-path-store"),
 
+    # Hidden div for folder picker setup
+    html.Div(id="folder-picker-setup", style={"display": "none"}),
+
     # Modal for saving data
     dbc.Modal(
         [
             dbc.ModalHeader("Guardar datos"),
             dbc.ModalBody([
                 html.P("Seleccione la ubicación donde desea guardar el archivo:"),
-                dbc.Input(
-                    id="save-directory-input",
-                    type="text",
-                    placeholder="Ruta del directorio",
-                    value="data"
-                ),
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Input(
+                            id="save-directory-input",
+                            type="text",
+                            placeholder="Ruta del directorio",
+                            value="data"
+                        ),
+                    ], width=9),
+                    dbc.Col([
+                        create_button(
+                            text="Explorar",
+                            id="browse-folder-button",
+                            color="secondary",
+                            className="w-100",
+                            icon="folder2-open"
+                        ),
+                    ], width=3),
+                ]),
                 html.Br(),
                 html.P("Nombre del archivo:"),
                 dbc.Input(
@@ -238,8 +254,8 @@ layout = dash.html.Div([
                 html.Small("El nombre del archivo se genera automáticamente con los parámetros de adquisición.", className="text-muted")
             ]),
             dbc.ModalFooter([
-                dbc.Button("Cancelar", id="cancel-save-button", className="me-2", color="secondary"),
-                dbc.Button("Guardar", id="confirm-save-button", color="success")
+                create_button("Cancelar", id="cancel-save-button", className="me-2", color="secondary"),
+                create_success_button("Guardar", id="confirm-save-button")
             ]),
         ],
         id="save-modal",
@@ -256,4 +272,24 @@ clientside_callback(
     Input("osa-ip-address", "value"),
     Input("wavelength-start", "value"),
     Input("wavelength-end", "value"),
+)
+
+# Add client-side callback for folder selection
+clientside_callback(
+    """
+    window.dash_clientside.file_selector.openFolderPicker
+    """,
+    Output("save-directory-input", "value", allow_duplicate=True),
+    Input("browse-folder-button", "n_clicks"),
+    prevent_initial_call=True
+)
+
+# Initialize folder picker setup when the page loads
+clientside_callback(
+    """
+    window.dash_clientside.file_selector.setupFolderPicker
+    """,
+    Output("folder-picker-setup", "children"),
+    Input("save-modal", "id"),
+    prevent_initial_call=False
 )
